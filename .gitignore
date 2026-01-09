@@ -1,0 +1,179 @@
+# ============================================================================
+# SENSITIVE DATA & CREDENTIALS
+# ============================================================================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+secrets.json
+config.local.*
+
+# ============================================================================
+# PYTHON
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# VIRTUAL ENVIRONMENTS
+# ============================================================================
+venv/
+env/
+ENV/
+.venv/
+.venv
+virtualenv/
+
+# ============================================================================
+# IDE & EDITORS
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# DATA FILES (EXCLUDE LARGE GENERATED DATA)
+# ============================================================================
+# ESG scenarios (large parquet files)
+data/esg/*.parquet
+data/esg/*.csv
+data/esg/*.feather
+
+# Inforce model points (generated)
+data/inforce/*.parquet
+data/inforce/*.csv
+
+# Liability results (generated)
+data/liability_results/*.parquet
+data/liability_results/*.csv
+
+# Valuation results (generated)
+data/valuation_results/*.parquet
+data/valuation_results/*.csv
+
+# Keep sample assumption files but exclude large datasets
+data/assumptions/*.parquet
+!data/assumptions/*.csv
+
+# Keep directory structure with .gitkeep files
+!data/**/.gitkeep
+
+# ============================================================================
+# OUTPUT & RUNTIME FILES
+# ============================================================================
+output/
+runs/
+logs/
+*.log
+*.log.*
+
+# ============================================================================
+# JUPYTER NOTEBOOKS
+# ============================================================================
+.ipynb_checkpoints/
+*.ipynb
+!notebooks/examples/*.ipynb
+
+# ============================================================================
+# TESTING & COVERAGE
+# ============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ============================================================================
+# DOCUMENTATION BUILD
+# ============================================================================
+docs/_build/
+docs/_static/
+docs/_templates/
+site/
+
+# ============================================================================
+# OS FILES
+# ============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ============================================================================
+# ARCHIVES & COMPRESSED FILES
+# ============================================================================
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*~.nib
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# ============================================================================
+# PROFILING & PERFORMANCE
+# ============================================================================
+*.prof
+*.lprof
+.pymon
+.dmypy.json
+dmypy.json
+
+# ============================================================================
+# MYPY TYPE CHECKING
+# ============================================================================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============================================================================
+# RUFF LINTER
+# ============================================================================
+.ruff_cache/

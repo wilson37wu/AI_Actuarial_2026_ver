@@ -1,0 +1,5 @@
+fund_id,valuation_date,asset_class,market_value,book_value,duration,average_rating
+PAR,2024-01-01,Govt,900000,880000,8.5,
+PAR,2024-01-01,Credit_A,575000,570000,6.2,A
+PAR,2024-01-01,Equity,700000,700000,0.0,
+PAR,2024-01-01,Cash,125000,125000,0.0,
