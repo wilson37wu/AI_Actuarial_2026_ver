@@ -1,0 +1,89 @@
+{
+    "mortality_qx": {
+        "file": "mortality_qx_enhanced.csv",
+        "dimensions": [
+            "product",
+            "gender",
+            "age",
+            "smoker_status",
+            "policy_year"
+        ],
+        "value_column": "qx",
+        "interpolation": "linear",
+        "extrapolation": "constant",
+        "description": "Mortality rates by product, gender, age, smoker status, and policy year"
+    },
+    "lapse": {
+        "file": "lapse_enhanced.csv",
+        "dimensions": [
+            "product",
+            "policy_year",
+            "age_band",
+            "sum_assured_band"
+        ],
+        "value_column": "lapse_rate",
+        "interpolation": "step",
+        "extrapolation": "constant",
+        "description": "Lapse rates by product, policy year, age band, and sum assured band"
+    },
+    "expenses": {
+        "file": "expenses_enhanced.csv",
+        "dimensions": [
+            "product",
+            "policy_year",
+            "expense_type",
+            "premium_band"
+        ],
+        "value_column": "expense_amount",
+        "interpolation": "step",
+        "extrapolation": "constant",
+        "description": "Expense loadings by product, policy year, expense type, and premium band"
+    },
+    "bonus_rates": {
+        "file": "bonus_rates.csv",
+        "dimensions": [
+            "product",
+            "policy_year",
+            "fund_type"
+        ],
+        "value_column": "bonus_rate",
+        "interpolation": "linear",
+        "extrapolation": "constant",
+        "description": "Reversionary bonus rates by product, policy year, and fund type"
+    },
+    "discount_curve": {
+        "file": "discount_curve.csv",
+        "dimensions": [
+            "term"
+        ],
+        "value_column": "discount_rate",
+        "interpolation": "linear",
+        "extrapolation": "constant",
+        "description": "Risk-free discount rates by term"
+    },
+    "strategic_asset_allocation": {
+        "file": "strategic_asset_allocation.csv",
+        "dimensions": [
+            "product",
+            "policy_year",
+            "fund_type",
+            "asset_class"
+        ],
+        "value_column": "target_weight",
+        "interpolation": "linear",
+        "extrapolation": "constant",
+        "description": "Strategic asset allocation targets by product, policy year, fund type, and asset class"
+    },
+    "initial_fund_assets": {
+        "file": "initial_fund_assets.csv",
+        "dimensions": [
+            "product",
+            "fund_type",
+            "asset_class"
+        ],
+        "value_column": "initial_amount",
+        "interpolation": "step",
+        "extrapolation": "constant",
+        "description": "Initial fund asset positions by product, fund type, and asset class"
+    }
+}
