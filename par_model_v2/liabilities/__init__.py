@@ -7,6 +7,12 @@ from par_model_v2.liabilities.deterministic_liability import (
     default_mortality_qx,
     value_portfolio,
 )
+from par_model_v2.liabilities.stochastic_participating import (
+    HKMortalityTable,
+    ParticipatingProductConfig,
+    StochasticParticipatingModel,
+    calibrate_sp500_gbm_params,
+)
 
 __all__ = [
     "DeterministicAssumptions",
@@ -14,4 +20,8 @@ __all__ = [
     "calculate_gpv_batch",
     "default_mortality_qx",
     "value_portfolio",
+    "HKMortalityTable",
+    "ParticipatingProductConfig",
+    "StochasticParticipatingModel",
+    "calibrate_sp500_gbm_params",
 ]
