@@ -38,5 +38,12 @@
     "pass": "True",
     "criterion": "Net cashflow (premium - claims - expenses) positive for most months in premium-paying years"
   },
+  "V7_wl_tail_coverage": {
+    "tail_pv_benefits": 29826.46,
+    "total_pv_benefits": 106721.8,
+    "tail_pct": 27.9,
+    "pass": "True",
+    "criterion": "Tail PV benefits (beyond 30yr ESG horizon) > 15% of total WL benefits"
+  },
   "overall_pass": true
 }

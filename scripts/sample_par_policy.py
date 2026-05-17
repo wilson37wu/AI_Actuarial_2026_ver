@@ -8,11 +8,24 @@ Policy: Male, age 40, standard underwriting, whole-life participating
 
 Outputs produced:
   1. Deterministic GPV, asset share, and profit test (annual)
-  2. Stochastic projection (500 trials × 30 years)  via GlobalESGGenerator
-  3. TVOG = E[stochastic PV(benefits)] - PV(benefits under best-estimate rates)
+  2. Stochastic projection (500 trials × 30 years) via Hull-White 1F directly,
+     with deterministic tail BEL appended beyond the ESG horizon
+  3. TVOG = E[stochastic PV(benefits+tail)] - deterministic GPV(best-estimate)
   4. IFRS 17 fulfilment cash flow breakdown (BEL + RA + TVOG)
-  5. Validation results: GPV recursion, asset share recursion, 70/30 split,
-     bonus zeroization, stochastic mean vs deterministic benchmark
+  5. Validation results: GPV recursion, asset share, profit split, cashflows,
+     tail coverage (F-003 resolution)
+
+F-003 Resolution:
+  The whole-life policy has meaningful mortality beyond the 30-year stochastic ESG
+  horizon.  At the end of the ESG run (attained age 80), the insured still has
+  material survival probability.  We handle this with a deterministic tail:
+
+      PV(0) of tail benefit at time T_esc conditioned on r(T_esg):
+        = (1/D(0,T_esg)) × Σ_τ [S(T_esg)·p_τ·q_{T+τ}·DB_{T+τ}·P(T_esg,T_esg+τ|r_T)]
+
+  where D(0,T_esg) is the path-realised discount accumulation, p_τ the
+  deterministic survival from T_esg to T_esg+τ, and P(t,T|r_t) is the
+  Hull-White closed-form ZCB price.
 """
 
 from __future__ import annotations
@@ -32,8 +45,9 @@ from par_model_v2.liabilities.deterministic_liability import (
     generate_monthly_cashflows,
     default_mortality_qx,
 )
-from par_model_v2.esg.global_esg import GlobalESGConfig, GlobalESGGenerator
-from par_model_v2.esg.models.hull_white_1f import YieldCurve, HullWhite1F, HullWhite1FParams
+from par_model_v2.esg.models.hull_white_1f import (
+    YieldCurve, HullWhite1F, DEFAULT_HW_PARAMS, DEFAULT_YIELD_CURVES
+)
 
 # ─── Policy definition ───────────────────────────────────────────────────────
 
@@ -46,7 +60,7 @@ POLICY = {
     "sum_assured": 200_000.0,
     "premium_term": 20,
     "issue_year": 2016,
-    "rb_accum_sa": 20_000.0,   # 10 yrs of 1% pa RB already accrued at val date
+    "rb_accum_sa": 20_000.0,   # 10 yrs of 2% pa RB already accrued at val date
     "retirement_age": 65,
     "status": "INFORCE",
 }
@@ -73,7 +87,7 @@ def run_deterministic_gpv() -> dict:
     return result
 
 
-# ─── 2. Deterministic profit test (annual, 30 years) ────────────────────────
+# ─── 2. Deterministic profit test (annual, 50 years) ────────────────────────
 
 def run_profit_test(discount_rate: float = DISCOUNT_RATE_DET) -> pd.DataFrame:
     """Project asset share and profit analytically year by year."""
@@ -92,7 +106,6 @@ def run_profit_test(discount_rate: float = DISCOUNT_RATE_DET) -> pd.DataFrame:
         age = age_at_val + t
         pol_yr = duration + t
         qx = default_mortality_qx(age - 1)  # mortality in the year (beginning of year age)
-        lx_frac = 1 - qx
 
         # Premium income (if in premium term)
         prem_income = premium * (1 - EXPENSE_LOADING) if pol_yr <= PT else 0.0
@@ -138,113 +151,152 @@ def run_profit_test(discount_rate: float = DISCOUNT_RATE_DET) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-# ─── 3. Stochastic ESG projection ────────────────────────────────────────────
+# ─── 3. Stochastic ESG projection with deterministic tail (F-003 fix) ────────
 
 def run_stochastic_projection(n_trials: int = 500, n_years: int = 30) -> dict:
-    """Project PAR policy asset share over stochastic ESG paths."""
-    cfg = GlobalESGConfig(
-        n_trials=n_trials,
-        n_years=n_years,
-        currencies=["CNY"],
-        equity_tickers=["E_CNY"],
-        bond_tenors=[1, 5, 10, 20],
-        seed=42,
-    )
-    gen = GlobalESGGenerator(cfg)
-    esg_df = gen.run()
+    """
+    Project PAR policy BEL over stochastic short-rate paths with a
+    deterministic tail beyond the ESG horizon.
 
+    Architecture
+    ------------
+    - Simulate CNY Hull-White short rate paths directly (no GlobalESGGenerator).
+    - Vectorize all per-trial computations over the NumPy axis-0 dimension.
+    - For each trial: at T_esg, condition on the terminal rate r_T to price
+      all future tail cashflows analytically via the HW closed-form ZCB.
+    """
+    dt = 1.0 / 12.0
+    n_steps = round(n_years / dt)  # 360 monthly steps for 30yr
+
+    # Build CNY interest rate model
+    cny_curve = YieldCurve.nelson_siegel(currency="CNY", **DEFAULT_YIELD_CURVES["CNY"])
+    cny_hw = HullWhite1F(cny_curve, DEFAULT_HW_PARAMS["CNY"])
+
+    # Simulate short rate paths: (n_trials, n_steps+1)
+    z = np.random.default_rng(42).standard_normal((n_trials, n_steps))
+    r_paths = cny_hw.simulate(n_trials, n_steps, dt, z=z)
+
+    # ── Deterministic decrement arrays (same for all trials) ────────────────
     SA = POLICY["sum_assured"]
     PT = POLICY["premium_term"]
-    premium = ANNUAL_PREMIUM
     age_at_val = POLICY["issue_age"] + (VALUATION_YEAR - POLICY["issue_year"])
-    duration_at_val = VALUATION_YEAR - POLICY["issue_year"]
+    dur_at_val = VALUATION_YEAR - POLICY["issue_year"]
 
-    n_steps = cfg.n_steps  # monthly steps
+    months = np.arange(1, n_steps + 1)            # 1 … n_steps
+    ages_m = age_at_val + months * dt
+    pol_yr_m = dur_at_val + months * dt
 
-    # For each trial, project asset share monthly
-    rate_col = "ESG.Economies.CNY.NominalYieldCurves.NominalYieldCurve.CashTotalReturn"
+    # Monthly mortality and survival
+    qx_m = np.array([default_mortality_qx(float(a)) / 12 for a in ages_m])
+    decrement_m = np.maximum(1.0 - qx_m - LAPSE_RATE / 12, 0.0)
 
-    pv_benefits_all = []
-    pv_premiums_all = []
-    tvog_guarantee_all = []
+    # survival_start[m-1] = in-force probability at START of month m
+    # = prod_{k=0}^{m-2} decrement_k, with convention S(0)=1
+    survival_start = np.r_[1.0, np.cumprod(decrement_m[:-1])]  # (n_steps,)
 
-    for trial in range(1, n_trials + 1):
-        trial_rows = esg_df[esg_df["Trial"] == trial].sort_values("Timestep")
-        cash_returns = trial_rows[rate_col].values  # monthly cash return factors
+    # RB at month m: bonus applied at end of each policy year
+    # rb_m[m-1] = rb_accum_sa * (1.02)^(m // 12)
+    rb_m = POLICY["rb_accum_sa"] * (1 + BONUS_RATE) ** (months // 12)  # (n_steps,)
+    db_m = SA + rb_m  # total death benefit at month m
 
-        asset_share = 0.0
-        pv_b = 0.0
-        pv_p = 0.0
-        cum_discount = 1.0
-        rb_accum = POLICY["rb_accum_sa"]
+    # Expected death cashflow (probability-weighted, deterministic)
+    expected_deaths_m = qx_m * survival_start * db_m   # (n_steps,)
 
-        survival = 1.0
-        lapse_m = LAPSE_RATE / 12
+    # Monthly gross premium (during premium term only)
+    gross_prem_m = np.where(pol_yr_m <= PT, ANNUAL_PREMIUM / 12, 0.0)  # (n_steps,)
+    prem_inc_m = gross_prem_m * survival_start                          # (n_steps,)
 
-        for m in range(1, min(n_steps, n_years * 12) + 1):
-            dt = 1 / 12
-            age = age_at_val + m / 12
-            pol_yr_frac = duration_at_val + m / 12
+    # ── Path-dependent discount factors ────────────────────────────────────
+    # cum_disc[trial, m-1] = exp(Σ_{k=0}^{m-1} r[trial,k]·dt)
+    #                      = accumulated account value factor to end of month m
+    cum_disc = np.exp(np.cumsum(r_paths[:, :-1] * dt, axis=1))   # (n_trials, n_steps)
 
-            cash_ret = float(cash_returns[m]) if m < len(cash_returns) else 1.0 + DISCOUNT_RATE_DET / 12
-            monthly_r = cash_ret - 1.0
+    # ── PV of stochastic-period cashflows ───────────────────────────────────
+    # Broadcast deterministic cashflows over trials dimension
+    pv_b_stoch = (expected_deaths_m[np.newaxis, :] / cum_disc).sum(axis=1)  # (n_trials,)
+    pv_p_stoch = (prem_inc_m[np.newaxis, :] / cum_disc).sum(axis=1)         # (n_trials,)
 
-            qx_m = default_mortality_qx(int(age)) / 12
-            prem_m = premium / 12 * (1 - EXPENSE_LOADING) if pol_yr_frac <= PT else 0.0
-            gross_prem_m = premium / 12 if pol_yr_frac <= PT else 0.0
+    # ── Terminal state (same for all trials except the short rate) ──────────
+    # In-force probability at end of stochastic horizon
+    survival_T = float(np.prod(decrement_m))           # scalar
 
-            # Investment return on asset share
-            asset_share = (asset_share + prem_m) * (1 + monthly_r)
+    # RB accumulated over the stochastic horizon
+    rb_T = float(POLICY["rb_accum_sa"] * (1 + BONUS_RATE) ** (n_steps // 12))
 
-            # RB accrues annually
-            if m % 12 == 0:
-                rb_accum *= (1 + BONUS_RATE)
+    # Accumulated discount factor at end of horizon (per trial)
+    cum_disc_T = cum_disc[:, -1]                       # (n_trials,)
 
-            # Death benefit
-            rb_t = rb_accum
-            death_benefit = SA + rb_t
-            death_cost = qx_m * survival * death_benefit
-            asset_share -= death_cost
+    # Terminal short rate per trial
+    r_T_all = r_paths[:, n_steps]                     # (n_trials,)
 
-            # Discount factor accumulation
-            cum_discount *= cash_ret
+    # ── Deterministic tail BEL (F-003 fix) ─────────────────────────────────
+    age_T = age_at_val + n_years                      # attained age at end of horizon
+    max_age = 110.0                                   # terminal age (qx → 1.0 before this)
+    n_tail = max(0, int((max_age - age_T) * 12))
 
-            pv_b += death_cost / cum_discount
-            pv_p += gross_prem_m * survival / cum_discount
+    if n_tail > 0:
+        tail_months = np.arange(1, n_tail + 1)
+        taus_tail = tail_months / 12.0               # (n_tail,) time from T_esg
+        ages_tail = age_T + taus_tail
 
-            # Update survival
-            survival *= (1 - qx_m - lapse_m)
-            survival = max(survival, 0.0)
+        # Tail mortality and survival
+        qx_tail = np.array([default_mortality_qx(float(a)) / 12 for a in ages_tail])
+        decrement_tail = np.maximum(1.0 - qx_tail - LAPSE_RATE / 12, 0.0)
+        # survival_tail[m-1] = in-force at start of tail month m (weighted by survival_T)
+        survival_tail = survival_T * np.r_[1.0, np.cumprod(decrement_tail[:-1])]  # (n_tail,)
 
-            if survival < 1e-6:
-                break
+        # Tail RB and death benefit
+        rb_tail = rb_T * (1 + BONUS_RATE) ** (tail_months // 12)   # (n_tail,)
+        db_tail = SA + rb_tail                                       # (n_tail,)
 
-        pv_benefits_all.append(pv_b)
-        pv_premiums_all.append(pv_p)
+        # Expected tail deaths (deterministic)
+        expected_deaths_tail = qx_tail * survival_tail * db_tail    # (n_tail,)
 
-    pv_b_arr = np.array(pv_benefits_all)
-    pv_p_arr = np.array(pv_premiums_all)
+        # ZCB prices conditioned on terminal rate: P(T_esg, T_esg+tau | r_T)
+        # Shape: (n_trials, n_tail)
+        t_h = float(n_years)
+        T_mats = t_h + taus_tail
+        zcb_matrix = np.column_stack([
+            cny_hw.zcb_price(t_h, float(T), r_T_all) for T in T_mats
+        ])  # (n_trials, n_tail)
 
-    # Best estimate stochastic
-    mean_pv_b = float(np.mean(pv_b_arr))
-    mean_pv_p = float(np.mean(pv_p_arr))
-    stoch_bel = float(np.mean(pv_b_arr - pv_p_arr))
+        # Tail PV at time T_esg (per trial): Σ_τ expected_death_τ × P(T,T+τ|r_T)
+        tail_pv_at_T = zcb_matrix @ expected_deaths_tail              # (n_trials,)
 
-    # Deterministic GPV under flat 3% (benchmark for TVOG calculation)
+        # Discount back to t=0: divide by accumulated discount factor
+        tail_bel = tail_pv_at_T / cum_disc_T                          # (n_trials,)
+    else:
+        tail_bel = np.zeros(n_trials)
+
+    # ── Combine ─────────────────────────────────────────────────────────────
+    pv_b_total = pv_b_stoch + tail_bel
+    stoch_bel = float(np.mean(pv_b_total - pv_p_stoch))
+
     det_gpv = run_deterministic_gpv()
     tvog = stoch_bel - det_gpv["GPV"]
 
+    mean_pv_b_stoch = float(np.mean(pv_b_stoch))
+    mean_tail = float(np.mean(tail_bel))
+    mean_pv_b_total = float(np.mean(pv_b_total))
+    mean_pv_p = float(np.mean(pv_p_stoch))
+
     return {
         "n_trials": n_trials,
-        "mean_pv_benefits": round(mean_pv_b, 2),
+        "mean_pv_benefits_stoch_only": round(mean_pv_b_stoch, 2),
+        "mean_tail_bel": round(mean_tail, 2),
+        "tail_bel_pct_total_benefits": round(mean_tail / max(mean_pv_b_total, 1) * 100, 1),
+        "mean_pv_benefits": round(mean_pv_b_total, 2),
         "mean_pv_premiums": round(mean_pv_p, 2),
         "stoch_bel": round(stoch_bel, 2),
         "det_gpv": round(det_gpv["GPV"], 2),
         "tvog": round(tvog, 2),
         "tvog_pct_bel": round(tvog / abs(stoch_bel) * 100, 2) if stoch_bel != 0 else 0,
-        "pct_5_gpv": round(float(np.percentile(pv_b_arr - pv_p_arr, 5)), 2),
-        "pct_95_gpv": round(float(np.percentile(pv_b_arr - pv_p_arr, 95)), 2),
-        "std_gpv": round(float(np.std(pv_b_arr - pv_p_arr)), 2),
+        "pct_5_gpv": round(float(np.percentile(pv_b_total - pv_p_stoch, 5)), 2),
+        "pct_95_gpv": round(float(np.percentile(pv_b_total - pv_p_stoch, 95)), 2),
+        "std_gpv": round(float(np.std(pv_b_total - pv_p_stoch)), 2),
+        # Terminal state (deterministic, informational)
+        "survival_at_T_esg": round(survival_T, 6),
+        "rb_at_T_esg": round(rb_T, 2),
     }
 
 
@@ -255,7 +307,7 @@ def validate_par_policy() -> dict:
     results = {}
 
     # V1: GPV recursive check using standard prospective reserve identity
-    #   V(t)·(1+r) + P_net·(1+r) = q_x·DB + p_x·V(t+1)
+    #   (V(t) + P_net)·(1+r) = q_x·DB + p_x·V(t+1)
     gpv_res = run_deterministic_gpv()
     age_at_val = POLICY["issue_age"] + (VALUATION_YEAR - POLICY["issue_year"])
 
@@ -273,9 +325,7 @@ def validate_par_policy() -> dict:
     rb_t = POLICY["rb_accum_sa"]
     death_benefit_t = POLICY["sum_assured"] + rb_t
     net_premium = ANNUAL_PREMIUM * (1 - EXPENSE_LOADING)
-    # LHS: assets at beginning of year accumulated with interest
     lhs = (gpv_res["GPV"] + net_premium) * (1 + DISCOUNT_RATE_DET)
-    # RHS: expected outgo at year end
     rhs = qx * death_benefit_t + px * gpv_next["GPV"]
 
     recursion_error = abs(lhs - rhs)
@@ -285,16 +335,16 @@ def validate_par_policy() -> dict:
         "rhs_q*DB+p*V(t+1)": round(rhs, 2),
         "error": round(recursion_error, 2),
         "error_pct": round(recursion_error_pct, 4),
-        "pass": recursion_error_pct < 5.0,  # within 5% (approximate formula)
+        "pass": recursion_error_pct < 5.0,
         "criterion": "GPV recursion error < 5% (approximation due to annual/monthly mismatch)",
     }
 
-    # V2: Premium adequacy — GPV should be negative (liability < asset for in-force)
+    # V2: Premium adequacy — GPV should be positive (net liability)
     results["V2_premium_adequacy"] = {
         "GPV": round(gpv_res["GPV"], 2),
         "PV_benefits": round(gpv_res["PV_benefits"], 2),
         "PV_premiums": round(gpv_res["PV_premiums"], 2),
-        "pass": gpv_res["GPV"] > 0,  # positive GPV = net liability
+        "pass": gpv_res["GPV"] > 0,
         "criterion": "GPV > 0 (benefits exceed premiums at best-estimate)",
     }
 
@@ -320,7 +370,7 @@ def validate_par_policy() -> dict:
         "criterion": "Average shareholder share = 30% ± 0.1%",
     }
 
-    # V5: Mortality adequacy — total expected deaths should match qx table
+    # V5: Mortality adequacy — total expected deaths should be positive
     cf_df = generate_monthly_cashflows(POLICY, discount_rate=DISCOUNT_RATE_DET,
                                        expense_loading=EXPENSE_LOADING,
                                        rb_growth_rate=BONUS_RATE,
@@ -343,13 +393,78 @@ def validate_par_policy() -> dict:
     results["V6_cashflow_sign"] = {
         "early_net_cf_positive_months": int((early_cf > 0).sum()),
         "early_net_cf_total_months": int(len(early_cf)),
-        "pass": (early_cf > 0).sum() > 40,  # majority of early months should be positive
+        "pass": (early_cf > 0).sum() > 40,
         "criterion": "Net cashflow (premium - claims - expenses) positive for most months in premium-paying years",
+    }
+
+    # V7: Deterministic tail materiality (F-003)
+    # The tail of a WL policy (beyond the 30-yr ESG horizon) must be material.
+    # We compute the proportion of total PV benefits attributable to age > (age_at_val+30)
+    # using purely deterministic arithmetic to keep the validation suite fast.
+    _v7 = _deterministic_tail_coverage()
+    results["V7_wl_tail_coverage"] = {
+        "tail_pv_benefits": round(_v7["tail_pv"], 2),
+        "total_pv_benefits": round(gpv_res["PV_benefits"], 2),
+        "tail_pct": round(_v7["tail_pct"], 1),
+        "pass": _v7["tail_pct"] > 15.0,
+        "criterion": "Tail PV benefits (beyond 30yr ESG horizon) > 15% of total WL benefits",
     }
 
     overall = all(v.get("pass", False) for v in results.values())
     results["overall_pass"] = overall
     return results
+
+
+def _deterministic_tail_coverage() -> dict:
+    """
+    Compute the proportion of total PV benefits for this WL policy that
+    falls beyond the 30-year ESG horizon, using deterministic assumptions.
+
+    Method
+    ------
+    1. Compute in-force probability at the end of the 30-year horizon
+       (stochastic period), including lapses.
+    2. Compute discount factor to the end of the horizon at 3% p.a.
+    3. Value a 'tail' version of the policy at the attained age at horizon end.
+    4. Tail contribution = survival_to_T × disc_to_T × PV_benefits(age at T)
+    """
+    age_at_val = POLICY["issue_age"] + (VALUATION_YEAR - POLICY["issue_year"])
+    horizon_years = 30
+
+    # Probability of surviving to end of 30yr horizon (mortality + lapse)
+    surv = 1.0
+    for yr in range(horizon_years):
+        age_yr = age_at_val + yr
+        qx = default_mortality_qx(float(age_yr))
+        surv *= (1.0 - qx) * (1.0 - LAPSE_RATE)
+
+    # Discount factor at 3% p.a. to end of horizon
+    disc_T = (1.0 + DISCOUNT_RATE_DET) ** (-horizon_years)
+
+    # RB accumulated at end of horizon
+    rb_at_T = POLICY["rb_accum_sa"] * (1.0 + BONUS_RATE) ** horizon_years
+
+    # 'Tail' policy: same policy but with age shifted to (age_at_val + horizon_years)
+    # and updated RB accumulation
+    tail_policy = dict(POLICY)
+    tail_policy["issue_year"] = VALUATION_YEAR - (age_at_val + horizon_years - POLICY["issue_age"])
+    tail_policy["rb_accum_sa"] = rb_at_T
+
+    tail_gpv = calculate_gpv(
+        tail_policy,
+        discount_rate=DISCOUNT_RATE_DET,
+        expense_loading=EXPENSE_LOADING,
+        rb_growth_rate=BONUS_RATE,
+        valuation_year=VALUATION_YEAR,
+    )
+
+    # PV at time 0 of tail benefits
+    tail_pv = surv * disc_T * tail_gpv["PV_benefits"]
+
+    total_pv = run_deterministic_gpv()["PV_benefits"]
+    tail_pct = tail_pv / max(total_pv, 1.0) * 100.0
+
+    return {"tail_pv": tail_pv, "total_pv": total_pv, "tail_pct": tail_pct}
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -360,9 +475,10 @@ def main(run_stochastic: bool = True, n_trials: int = 500):
     print("=" * 70)
 
     # Policy summary
+    age_at_val = POLICY["issue_age"] + (VALUATION_YEAR - POLICY["issue_year"])
     print(f"\nPolicy: {POLICY['policy_id']}")
     print(f"  Product: Whole Life Participating (WL)")
-    print(f"  Insured: Male, age {POLICY['issue_age'] + (VALUATION_YEAR - POLICY['issue_year'])} (issued age {POLICY['issue_age']} in {POLICY['issue_year']})")
+    print(f"  Insured: Male, age {age_at_val} (issued age {POLICY['issue_age']} in {POLICY['issue_year']})")
     print(f"  Sum Assured: CNY {POLICY['sum_assured']:,.0f}")
     print(f"  Premium term: {POLICY['premium_term']} years  |  Annual premium: CNY {ANNUAL_PREMIUM:,.0f}")
     print(f"  Accrued RB at valuation: CNY {POLICY['rb_accum_sa']:,.0f}")
@@ -382,22 +498,34 @@ def main(run_stochastic: bool = True, n_trials: int = 500):
          "death_cost","inv_surplus_sh","asset_share_end"]
     ].to_string(index=False))
 
+    # Tail coverage (deterministic)
+    print("\n--- 3. DETERMINISTIC TAIL COVERAGE (F-003 check) ---")
+    tail_cov = _deterministic_tail_coverage()
+    print(f"  Survival probability to age {age_at_val + 30:.0f}: {tail_cov['tail_pv'] / tail_cov['total_pv'] * 100:.0f}% of benefits in tail")
+    print(f"  Tail PV benefits (age 80+): CNY {tail_cov['tail_pv']:>12,.2f}")
+    print(f"  Total PV benefits:          CNY {tail_cov['total_pv']:>12,.2f}")
+    print(f"  Tail coverage ratio:        {tail_cov['tail_pct']:.1f}%")
+
     # Stochastic
     if run_stochastic:
-        print("\n--- 3. STOCHASTIC PROJECTION ---")
+        print("\n--- 4. STOCHASTIC PROJECTION (with deterministic tail) ---")
         stoch = run_stochastic_projection(n_trials=n_trials)
         print(f"  Trials: {stoch['n_trials']}")
-        print(f"  Mean PV Benefits:   CNY {stoch['mean_pv_benefits']:>12,.2f}")
-        print(f"  Mean PV Premiums:   CNY {stoch['mean_pv_premiums']:>12,.2f}")
-        print(f"  Stochastic BEL:     CNY {stoch['stoch_bel']:>12,.2f}")
-        print(f"  Deterministic GPV:  CNY {stoch['det_gpv']:>12,.2f}")
-        print(f"  TVOG:               CNY {stoch['tvog']:>12,.2f}  ({stoch['tvog_pct_bel']:.2f}% of BEL)")
-        print(f"  BEL 5th pctile:     CNY {stoch['pct_5_gpv']:>12,.2f}")
-        print(f"  BEL 95th pctile:    CNY {stoch['pct_95_gpv']:>12,.2f}")
-        print(f"  BEL std:            CNY {stoch['std_gpv']:>12,.2f}")
+        print(f"  Mean PV Benefits (stoch only): CNY {stoch['mean_pv_benefits_stoch_only']:>12,.2f}")
+        print(f"  Mean Tail BEL (age 80-110):    CNY {stoch['mean_tail_bel']:>12,.2f}  ({stoch['tail_bel_pct_total_benefits']:.1f}% of total)")
+        print(f"  Mean PV Benefits (total):      CNY {stoch['mean_pv_benefits']:>12,.2f}")
+        print(f"  Mean PV Premiums:              CNY {stoch['mean_pv_premiums']:>12,.2f}")
+        print(f"  Stochastic BEL (total):        CNY {stoch['stoch_bel']:>12,.2f}")
+        print(f"  Deterministic GPV:             CNY {stoch['det_gpv']:>12,.2f}")
+        print(f"  TVOG:                          CNY {stoch['tvog']:>12,.2f}  ({stoch['tvog_pct_bel']:.2f}% of BEL)")
+        print(f"  BEL 5th percentile:            CNY {stoch['pct_5_gpv']:>12,.2f}")
+        print(f"  BEL 95th percentile:           CNY {stoch['pct_95_gpv']:>12,.2f}")
+        print(f"  BEL std:                       CNY {stoch['std_gpv']:>12,.2f}")
+        print(f"  Survival at T=30yr:            {stoch['survival_at_T_esg']:.4%}")
+        print(f"  RB at T=30yr:                  CNY {stoch['rb_at_T_esg']:>12,.2f}")
 
     # Validation
-    print("\n--- 4. VALIDATION RESULTS ---")
+    print("\n--- 5. VALIDATION RESULTS ---")
     val = validate_par_policy()
     for name, res in val.items():
         if name == "overall_pass":

@@ -1,7 +1,7 @@
 {
-  "report_id": "VAL-20260517-115045",
-  "generated_at": "2026-05-17T11:50:45.814631",
-  "n_trials": 200,
+  "report_id": "VAL-20260517-120002",
+  "generated_at": "2026-05-17T12:00:02.893496",
+  "n_trials": 300,
   "sections": {
     "A_esg": {
       "results": {
@@ -90,6 +90,13 @@
           "pass": "True",
           "criterion": "Net cashflow (premium - claims - expenses) positive for most months in premium-paying years"
         },
+        "V7_wl_tail_coverage": {
+          "tail_pv_benefits": 29826.46,
+          "total_pv_benefits": 106721.8,
+          "tail_pct": 27.9,
+          "pass": "True",
+          "criterion": "Tail PV benefits (beyond 30yr ESG horizon) > 15% of total WL benefits"
+        },
         "overall_pass": true
       },
       "elapsed_s": 0.02
@@ -97,24 +104,24 @@
     "C_gmab": {
       "results": {
         "V1_mc_vs_bs_benchmark": {
-          "mc_cost": 34882.15,
+          "mc_cost": 35948.6,
           "bs_cost": 37515.3,
-          "abs_diff": 2633.15,
-          "std_error": 2140.71,
+          "abs_diff": 1566.7,
+          "std_error": 1770.56,
           "within_3_std_errors": "True",
-          "relative_error_pct": 7.02,
+          "relative_error_pct": 4.18,
           "pass": "True",
           "criterion": "MC option cost within 3 SE or 10% of BS benchmark (residual from stochastic vs flat-rate assumption)"
         },
         "V2_fund_martingale": {
-          "mean_fund_at_maturity": 113843.34,
+          "mean_fund_at_maturity": 115635.92,
           "theoretical_forward": 113886.71,
-          "error_pct": 0.038,
+          "error_pct": 1.536,
           "pass": "True",
           "criterion": "E[F(T)] within 5% of theoretical forward F0\u00b7exp((r_short-c)T) \u2014 tolerance accounts for HW convexity and MC error"
         },
         "V3_non_negative_cost": {
-          "mc_cost": 34882.15,
+          "mc_cost": 35948.6,
           "pass": true,
           "criterion": "GMAB option cost \u2265 0 (put option cannot be negative)"
         },
@@ -134,30 +141,30 @@
         },
         "V6_prob_itm_consistency": {
           "bs_prob_itm": 0.7292,
-          "mc_prob_itm": 0.745,
-          "abs_diff": 0.0158,
+          "mc_prob_itm": 0.75,
+          "abs_diff": 0.0208,
           "pass": true,
           "criterion": "MC probability ITM within 5pp of Black-Scholes N(-d2)"
         },
         "V7_tvog_non_negative": {
-          "tvog": 34882.15,
+          "tvog": 35948.6,
           "pass": "True",
           "criterion": "TVOG (MC cost - deterministic cost) \u2265 0 (Jensen's inequality for convex payoff)"
         },
         "V8_se_acceptable": {
-          "mc_std_error": 2140.71,
-          "relative_se_pct": 6.14,
+          "mc_std_error": 1770.56,
+          "relative_se_pct": 4.93,
           "pass": "True",
           "criterion": "Monte Carlo standard error < 10% of option cost estimate"
         },
         "overall_pass": true
       },
-      "elapsed_s": 0.16
+      "elapsed_s": 0.25
     }
   },
   "summary": {
-    "total_tests": 21,
-    "passed": 21,
+    "total_tests": 22,
+    "passed": 22,
     "failed": 0,
     "pass_rate_pct": 100.0,
     "overall_pass": true,

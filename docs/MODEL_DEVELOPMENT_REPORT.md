@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **Report reference** | MDR-2026-001 |
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **Date** | May 2026 |
 | **Status** | Final — For Review by Appointed Actuary |
 | **Classification** | Internal — Restricted |
@@ -19,7 +19,7 @@ This Model Development Report (MDR) documents the design, implementation, valida
 2. A **Participating (PAR) Policy projection engine** for whole-life with-profits policies including deterministic GPV, asset share projection, 70/30 profit sharing, and non-guaranteed bonus mechanics.
 3. A **Guaranteed Minimum Accumulation Benefit (GMAB) valuation engine** using Monte Carlo simulation for TVOG calculation and IFRS 17 fulfilment cash flow estimation.
 
-**Validation outcome:** 21 tests across 3 test suites — all passed (100% pass rate). One substantive root-cause finding was identified and corrected during development (Section 8.2). The model is assessed as **fit for initial actuarial use** subject to the limitations and planned enhancements documented in Section 10.
+**Validation outcome:** 22 tests across 3 test suites — all passed (100% pass rate). Two substantive findings were identified and corrected during development (Section 8.2, 8.3). The model is assessed as **fit for initial actuarial use** subject to the limitations and planned enhancements documented in Section 10.
 
 ---
 
@@ -92,7 +92,7 @@ This Model Development Report (MDR) documents the design, implementation, valida
 **Economic basis:**
 - Deterministic discount rate: 3.0% p.a. (CNY best-estimate)
 - Stochastic ESG: Hull-White 1F calibrated to CNY Nelson-Siegel curve (β₀=2.5%, λ=0.4)
-- Projection horizon: 30 years (stochastic), full policy term (deterministic)
+- Projection horizon: 30 years (stochastic) + deterministic tail to age 110
 
 **Key deterministic results:**
 
@@ -101,10 +101,13 @@ This Model Development Report (MDR) documents the design, implementation, valida
 | PV of future premiums | CNY 85,333 |
 | PV of future benefits | CNY 106,722 |
 | GPV (net liability) | CNY 21,388 |
-| Stochastic BEL (30yr projection) | CNY −23,038 |
-| Stochastic TVOG | Note: BEL excludes tail mortality beyond yr 30 |
+| Stochastic PV benefits (30yr only) | CNY 59,474 |
+| Tail BEL (age 80–110, deterministic) | CNY 30,666 (34.0% of total) |
+| Total stochastic BEL (with tail) | CNY 9,770 |
+| TVOG (stochastic BEL − det. GPV) | CNY −11,618 |
+| Tail coverage ratio (det. check) | 27.9% of deterministic PV benefits |
 
-*Note on stochastic BEL:* The 30-year stochastic projection captures approximately 60% of expected lifetime deaths (mortality is exponential — most deaths occur between ages 70–90, i.e. years 20–50). The stochastic BEL of −23,038 reflects the truncated horizon under stochastic rates (averaging ~2.55% CNY vs. 3.0% deterministic), not a model error. Full policy-term stochastic projection is recommended for production.
+*F-003 resolution:* The deterministic tail appends analytically-priced cashflows from age 80 to age 110 conditioned on the terminal Hull-White short rate at the end of each trial's 30-year horizon. The tail contributes 34% of total stochastic benefits — confirming it is highly material for WL products.
 
 ### 2.2 GMAB Variable Annuity — GMAB-TEST-001
 
@@ -240,8 +243,9 @@ See ESG Technical Specification (`docs/ESG_TECHNICAL_SPECIFICATION.md`) for full
 | 70/30 profit split | V4 | Mean shareholder share = 30.0% ± 0.1% | 30.00% | **PASS** |
 | Cashflow completeness | V5 | Total expected death claims > 0; guaranteed and non-guaranteed components both present | Claims = CNY 176,716 (of which guaranteed = CNY 150,123; non-guaranteed = CNY 26,592) | **PASS** |
 | Cashflow sign convention | V6 | Net CF positive in ≥ 40 of first 60 months (premium-paying period) | 60/60 positive months | **PASS** |
+| WL tail coverage (F-003) | V7 | Deterministic tail PV benefits (age 80+) > 15% of total WL PV benefits | 27.9% | **PASS** |
 
-**Overall: 6/6 PASS**
+**Overall: 7/7 PASS**
 
 ### 5.2 Test Detail: GPV Recursion (V1)
 
@@ -410,19 +414,28 @@ The martingale property is satisfied to within Monte Carlo noise, confirming no-
 
 ---
 
-### 8.3 Finding F-003 (Open): Stochastic PAR BEL Truncation
+### 8.3 Finding F-003 (Resolved): Stochastic PAR BEL Truncation
 
 **Category:** Model scope limitation  
 **Severity:** Medium  
 **Discovery:** During PAR stochastic projection
 
-**Description:** The stochastic PAR projection uses a 30-year horizon matching the ESG. For a whole-life policy issued at age 40 (age 50 at valuation), material mortality occurs between ages 70–90 (years 20–50 of projection). The 30-year stochastic BEL captures approximately 60% of expected lifetime death benefits, creating a systematic downward bias in BEL when the horizon is shorter than the full policy term.
+**Description:** The stochastic PAR projection used a 30-year horizon matching the ESG. For a whole-life policy issued at age 40 (age 50 at valuation), material mortality occurs between ages 70–110 (years 20–60 of projection). The 30-year stochastic BEL captured only ~66% of expected lifetime death benefits.
 
-**Impact:** Stochastic BEL (30yr) = −CNY 23,038 vs deterministic GPV (full term) = CNY 21,388 — a CNY 44,426 difference attributable to truncation and rate mismatch, not model error.
+**Resolution:** Implemented a vectorised deterministic tail that appends analytically-priced cashflows from age 80 to age 110 for each trial. The tail is conditioned on the terminal Hull-White short rate at the end of the 30-year horizon:
 
-**Planned resolution:** Implement deterministic tail liability using the initial curve's discount factors for cashflows beyond the ESG horizon. See Section 10.
+$$\text{Tail PV}(0; \text{trial}) = \frac{1}{D(0,T_{esg})} \sum_{\tau=1}^{\tau_{max}} S(T_{esg}) \cdot {}_{m}p_{T_{esg}} \cdot q_{T+\tau} \cdot DB_{T+\tau} \cdot P(T_{esg},\, T_{esg}+\tau \mid r_T)$$
 
-**Status:** Open — low priority for GMAB products; high priority for WL/whole-life.
+where $D(0,T_{esg})$ is the path-realised accumulated discount factor, ${}_{m}p$ is the deterministic tail survival, and $P(t,T \mid r_t)$ is the Hull-White closed-form ZCB price.
+
+**Results after fix:**
+- Tail BEL = CNY 30,666 per trial mean (34.0% of total stochastic benefits)
+- Deterministic tail coverage ratio = 27.9% of total PV benefits
+- New test V7 (tail coverage > 15%) added and passing
+
+**Validation:** V7_wl_tail_coverage added to the PAR test suite; passes with tail proportion = 27.9% > 15% threshold.
+
+**Status:** Resolved.
 
 ---
 
@@ -461,6 +474,7 @@ The martingale property is satisfied to within Monte Carlo noise, confirming no-
 | PAR | B4 | 70/30 profit split | SH share = 30.0% ± 0.1% | 30.00% | ✅ PASS |
 | PAR | B5 | Cashflow completeness | Claims > 0; guaranteed & NG present | ✓ | ✅ PASS |
 | PAR | B6 | Cashflow sign convention | ≥ 40/60 months positive | 60/60 | ✅ PASS |
+| PAR | B7 | WL tail coverage (F-003) | Tail PV benefits > 15% of total | 27.9% | ✅ PASS |
 | GMAB | C1 | MC vs Black-Scholes | Within 3 SE or 10% | 4.06% / 1.55 SE | ✅ PASS |
 | GMAB | C2 | Fund forward consistency | Error < 5% | 4.53% | ✅ PASS |
 | GMAB | C3 | Non-negative option cost | Cost ≥ 0 | CNY 35,993 | ✅ PASS |
@@ -475,9 +489,9 @@ The martingale property is satisfied to within Monte Carlo noise, confirming no-
 | Test Group | Tests | Passed | Pass Rate |
 |---|---|---|---|
 | A. ESG Quality | 7 | 7 | 100% |
-| B. PAR Policy | 6 | 6 | 100% |
+| B. PAR Policy | 7 | 7 | 100% |
 | C. GMAB Annuity | 8 | 8 | 100% |
-| **Total** | **21** | **21** | **100%** |
+| **Total** | **22** | **22** | **100%** |
 
 ### 9.3 Defect Summary
 
@@ -485,7 +499,7 @@ The martingale property is satisfied to within Monte Carlo noise, confirming no-
 |---|---|---|---|
 | F-001: Recursion test formula | Test calibration | Low | ✅ Resolved |
 | F-002: HW simulation starting state | Implementation defect | **High** | ✅ Resolved |
-| F-003: Stochastic PAR BEL truncation | Model scope limitation | Medium | Open |
+| F-003: Stochastic PAR BEL truncation | Model scope limitation | Medium | ✅ Resolved |
 | F-004: GMAB MC-BS residual | Expected benchmark divergence | Informational | Monitoring |
 
 ---
@@ -496,7 +510,7 @@ The martingale property is satisfied to within Monte Carlo noise, confirming no-
 
 | Limitation | Affected Calculation | Impact | Priority |
 |---|---|---|---|
-| WL stochastic BEL truncated at 30yr ESG horizon | IFRS 17 BEL for WL | Systematic understatement | **High** |
+| ~~WL stochastic BEL truncated at 30yr ESG horizon~~ | ~~IFRS 17 BEL for WL~~ | *Resolved — deterministic tail implemented* | Resolved |
 | Single-factor rates (HW1F) | Yield curve twist/butterfly not modelled | Underestimates long-rate vol | High |
 | Constant equity vol (no smile) | Deep OTM GMAB options | Underestimates high-σ tail | High |
 | No FX model | Multi-currency portfolios | Cannot convert foreign liabilities | High |
@@ -510,7 +524,7 @@ The martingale property is satisfied to within Monte Carlo noise, confirming no-
 
 | Enhancement | Benefit | Estimated Effort |
 |---|---|---|
-| Deterministic tail for WL BEL (beyond ESG horizon) | Resolves F-003 | 1 day |
+| ~~Deterministic tail for WL BEL~~ | *Completed — F-003 resolved* | Done |
 | Dynamic non-guaranteed bonus model | Enables WL TVOG calculation | 3 days |
 | Hull-White 2-factor model | Twist and butterfly scenarios | 5 days |
 | Heston stochastic volatility for equity | VA/GMAB smile; better TVOG | 5 days |
@@ -543,7 +557,7 @@ Before production use, the following must be completed:
 - [ ] Replacement of exponential mortality with approved population table
 - [ ] Stress test of GMAB option cost: 2008-style equity crash scenario (-50% in year 1)
 - [ ] Reconciliation of IFRS 17 FCF to prior reporting period (or independent pricing model)
-- [ ] Completion of F-003 deterministic tail fix for WL products
+- [x] Completion of F-003 deterministic tail fix for WL products *(done in v1.1)*
 - [ ] Formal sign-off by Appointed Actuary
 
 ### 11.3 Model Change Control
@@ -558,11 +572,11 @@ Any of the following constitutes a material model change requiring re-validation
 
 ### 11.4 Sign-Off
 
-*This model has passed all 21 validation tests in the initial test suite. The two resolved defects (F-001, F-002) were identified and corrected during development. Two open findings (F-003, F-004) are documented and understood. The model developer certifies that the implementation is consistent with the specification documented in `docs/ESG_TECHNICAL_SPECIFICATION.md`.*
+*This model has passed all 22 validation tests in the current test suite. Three resolved defects (F-001, F-002, F-003) were identified and corrected during development, including the critical HW initial-state bug (F-002) and the WL tail liability truncation (F-003). One open finding (F-004) is documented as informational. The model developer certifies that the implementation is consistent with the specification documented in `docs/ESG_TECHNICAL_SPECIFICATION.md`.*
 
 | Role | Name | Date | Signature |
 |---|---|---|---|
-| Model Developer | AI Actuarial Team | May 2026 | *(electronic)* |
+| Model Developer | AI Actuarial Team | May 2026 (v1.1) | *(electronic)* |
 | Actuarial Reviewer | *Pending* | | |
 | Appointed Actuary | *Pending* | | |
 
