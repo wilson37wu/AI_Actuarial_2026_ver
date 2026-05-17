@@ -1,0 +1,42 @@
+{
+  "V1_gpv_recursion": {
+    "lhs_(V+P)*(1+r)": 31815.03,
+    "rhs_q*DB+p*V(t+1)": 32293.66,
+    "error": 478.62,
+    "error_pct": 1.5044,
+    "pass": "True",
+    "criterion": "GPV recursion error < 5% (approximation due to annual/monthly mismatch)"
+  },
+  "V2_premium_adequacy": {
+    "GPV": 21388.38,
+    "PV_benefits": 106721.8,
+    "PV_premiums": 85333.42,
+    "pass": "True",
+    "criterion": "GPV > 0 (benefits exceed premiums at best-estimate)"
+  },
+  "V3_asset_share_positivity": {
+    "negative_years_in_first_10": 0,
+    "pass": "True",
+    "criterion": "Asset share non-negative in first 10 policy years (level premium adequacy)"
+  },
+  "V4_profit_split": {
+    "mean_shareholder_pct": 30.0,
+    "target": 30.0,
+    "pass": true,
+    "criterion": "Average shareholder share = 30% \u00b1 0.1%"
+  },
+  "V5_cashflow_completeness": {
+    "total_expected_claims": 176715.67,
+    "guaranteed_component": 150123.33,
+    "non_guaranteed_component": 26592.35,
+    "pass": "True",
+    "criterion": "Total expected death claims > 0; guaranteed and non-guaranteed components present"
+  },
+  "V6_cashflow_sign": {
+    "early_net_cf_positive_months": 60,
+    "early_net_cf_total_months": 60,
+    "pass": "True",
+    "criterion": "Net cashflow (premium - claims - expenses) positive for most months in premium-paying years"
+  },
+  "overall_pass": true
+}

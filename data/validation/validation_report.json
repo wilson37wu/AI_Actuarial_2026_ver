@@ -1,0 +1,166 @@
+{
+  "report_id": "VAL-20260517-115045",
+  "generated_at": "2026-05-17T11:50:45.814631",
+  "n_trials": 200,
+  "sections": {
+    "A_esg": {
+      "results": {
+        "A1_zcb_t0_USD": {
+          "max_rel_err_pct": 0.0,
+          "pass": true,
+          "criterion": "ZCB price at t=0 matches initial curve within 0.5% for all tenors"
+        },
+        "A1_zcb_t0_CNY": {
+          "max_rel_err_pct": 0.0,
+          "pass": true,
+          "criterion": "ZCB price at t=0 matches initial curve within 0.5% for all tenors"
+        },
+        "A2_bond_martingale_USD": {
+          "empirical": 0.508678,
+          "theoretical": 0.502144,
+          "error_pct": 1.301,
+          "pass": true,
+          "criterion": "E[P(5,15)\u00b7D(0,5)] within 2% of P(0,15) using 2000 trials"
+        },
+        "A3_zcb_bounds": {
+          "min": 0.567962,
+          "max": 0.919113,
+          "pass": true,
+          "criterion": "All ZCB prices in (0, 1.001]"
+        },
+        "A4_equity_tr_t0": {
+          "max_deviation_from_1": 0.0,
+          "pass": true,
+          "criterion": "Equity total return = 1.0 at t=0 for all trials"
+        },
+        "A5_correlation_psd": {
+          "positive_definite": true,
+          "min_eigenvalue": 0.143397,
+          "pass": true,
+          "criterion": "Default correlation matrix is positive definite"
+        },
+        "A6_equity_rn_drift": {
+          "mean_log_ret": 0.000276,
+          "expected": -0.000226,
+          "diff": 0.000501,
+          "pass": true,
+          "criterion": "Mean equity log-return matches risk-neutral expectation within 0.1%"
+        }
+      },
+      "elapsed_s": 0.25
+    },
+    "B_par": {
+      "results": {
+        "V1_gpv_recursion": {
+          "lhs_(V+P)*(1+r)": 31815.03,
+          "rhs_q*DB+p*V(t+1)": 32293.66,
+          "error": 478.62,
+          "error_pct": 1.5044,
+          "pass": "True",
+          "criterion": "GPV recursion error < 5% (approximation due to annual/monthly mismatch)"
+        },
+        "V2_premium_adequacy": {
+          "GPV": 21388.38,
+          "PV_benefits": 106721.8,
+          "PV_premiums": 85333.42,
+          "pass": "True",
+          "criterion": "GPV > 0 (benefits exceed premiums at best-estimate)"
+        },
+        "V3_asset_share_positivity": {
+          "negative_years_in_first_10": 0,
+          "pass": "True",
+          "criterion": "Asset share non-negative in first 10 policy years (level premium adequacy)"
+        },
+        "V4_profit_split": {
+          "mean_shareholder_pct": 30.0,
+          "target": 30.0,
+          "pass": true,
+          "criterion": "Average shareholder share = 30% \u00b1 0.1%"
+        },
+        "V5_cashflow_completeness": {
+          "total_expected_claims": 176715.67,
+          "guaranteed_component": 150123.33,
+          "non_guaranteed_component": 26592.35,
+          "pass": "True",
+          "criterion": "Total expected death claims > 0; guaranteed and non-guaranteed components present"
+        },
+        "V6_cashflow_sign": {
+          "early_net_cf_positive_months": 60,
+          "early_net_cf_total_months": 60,
+          "pass": "True",
+          "criterion": "Net cashflow (premium - claims - expenses) positive for most months in premium-paying years"
+        },
+        "overall_pass": true
+      },
+      "elapsed_s": 0.02
+    },
+    "C_gmab": {
+      "results": {
+        "V1_mc_vs_bs_benchmark": {
+          "mc_cost": 34882.15,
+          "bs_cost": 37515.3,
+          "abs_diff": 2633.15,
+          "std_error": 2140.71,
+          "within_3_std_errors": "True",
+          "relative_error_pct": 7.02,
+          "pass": "True",
+          "criterion": "MC option cost within 3 SE or 10% of BS benchmark (residual from stochastic vs flat-rate assumption)"
+        },
+        "V2_fund_martingale": {
+          "mean_fund_at_maturity": 113843.34,
+          "theoretical_forward": 113886.71,
+          "error_pct": 0.038,
+          "pass": "True",
+          "criterion": "E[F(T)] within 5% of theoretical forward F0\u00b7exp((r_short-c)T) \u2014 tolerance accounts for HW convexity and MC error"
+        },
+        "V3_non_negative_cost": {
+          "mc_cost": 34882.15,
+          "pass": true,
+          "criterion": "GMAB option cost \u2265 0 (put option cannot be negative)"
+        },
+        "V4_vega_positive": {
+          "cost_at_vol_15pct": 26706.33,
+          "cost_at_vol_25pct": 37515.3,
+          "cost_at_vol_35pct": 47897.28,
+          "pass": true,
+          "criterion": "Guarantee cost strictly increasing in equity volatility (vega > 0)"
+        },
+        "V5_rho_negative": {
+          "cost_at_r_minus_100bps": 45562.08,
+          "cost_at_r_base": 37515.3,
+          "cost_at_r_plus_100bps": 30640.34,
+          "pass": true,
+          "criterion": "Guarantee cost strictly decreasing in risk-free rate (put rho < 0)"
+        },
+        "V6_prob_itm_consistency": {
+          "bs_prob_itm": 0.7292,
+          "mc_prob_itm": 0.745,
+          "abs_diff": 0.0158,
+          "pass": true,
+          "criterion": "MC probability ITM within 5pp of Black-Scholes N(-d2)"
+        },
+        "V7_tvog_non_negative": {
+          "tvog": 34882.15,
+          "pass": "True",
+          "criterion": "TVOG (MC cost - deterministic cost) \u2265 0 (Jensen's inequality for convex payoff)"
+        },
+        "V8_se_acceptable": {
+          "mc_std_error": 2140.71,
+          "relative_se_pct": 6.14,
+          "pass": "True",
+          "criterion": "Monte Carlo standard error < 10% of option cost estimate"
+        },
+        "overall_pass": true
+      },
+      "elapsed_s": 0.16
+    }
+  },
+  "summary": {
+    "total_tests": 21,
+    "passed": 21,
+    "failed": 0,
+    "pass_rate_pct": 100.0,
+    "overall_pass": true,
+    "failures": []
+  }
+}

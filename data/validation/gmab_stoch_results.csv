@@ -1,0 +1,2 @@
+n_trials,guaranteed_amount,mean_fund_at_maturity,std_fund_at_maturity,prob_itm,mc_option_cost,mc_std_error,mc_ci_95_lo,mc_ci_95_hi,det_guarantee_cost,tvog,tvog_pct_premium,risk_adjustment_75pct,bel,fcf
+1000,134391.64,119048.61,106475.77,0.721,35993.36,978.71,34075.09,37911.62,0.0,35993.36,35.993,26156.1,35993.36,62149.46

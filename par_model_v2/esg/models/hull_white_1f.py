@@ -56,7 +56,7 @@ class YieldCurve:
         if np.any(tenors <= 0):
             raise ValueError("All tenors must be positive.")
         if tenors[0] > 0.001:
-            # Prepend r(0) = short end approximation
+            # Prepend r(0) = short end approximation (flat extrapolation)
             tenors = np.r_[1e-6, tenors]
             zero_rates = np.r_[zero_rates[0], zero_rates]
 
@@ -323,10 +323,11 @@ class HullWhite1F:
         e_a_dt = np.exp(-a * dt)
         std_step = sigma * np.sqrt((1.0 - np.exp(-2.0 * a * dt)) / (2.0 * a))
 
-        # x(0) = r(0) - α(0): start deviations at zero
-        alpha_0 = self.alpha(np.array([0.0]))[0]
-        r0 = self.curve.zero_rate(np.array([1e-6]))[0]  # short end rate
-        x0 = r0 - alpha_0
+        # Under the HW no-arbitrage condition, x(0) = r(0) - α(0) = 0.
+        # α(0) = f(0,0) and r(0) = f(0,0) by construction, so x(0) = 0.
+        # We enforce this directly rather than computing from the spline,
+        # which avoids numerical errors from short-end spline extrapolation.
+        x0 = 0.0
 
         # Precompute alpha grid for all future times
         times = np.arange(n_steps + 1) * dt

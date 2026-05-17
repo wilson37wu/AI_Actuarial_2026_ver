@@ -1,0 +1,9 @@
+scenario,mc_cost,change_pct
+Base,34775.28,0.0
+Equity vol +5pp (30%),42789.25,23.0
+Equity vol -5pp (20%),32126.25,-7.6
+RFR +100bps,30640.34,-11.9
+RFR -100bps,45562.08,31.0
+Guarantee +2pp (5%),54142.83,55.7
+Guarantee -2pp (1%),25023.26,-28.0
+Charge +50bps (2%),37515.3,7.9
