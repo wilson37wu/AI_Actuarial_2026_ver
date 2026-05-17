@@ -1,0 +1,154 @@
+{
+  "session_id": "actuarial-model-auto-dev",
+  "created_at": "2026-05-17T00:00:00Z",
+  "last_run": "2026-05-17T14:00:00Z",
+  "last_run_duration_minutes": 90,
+  "current_phase": "Phase 1: Model Review & Documentation",
+  "overall_status": "in_progress",
+  "phases": {
+    "Phase 1: Model Review & Documentation": {
+      "status": "in_progress",
+      "description": "Understand existing model structure, identify gaps vs industry standards (SOA, IA, ERM), document assumptions and deviations",
+      "tasks": [
+        "Audit current model code and architecture",
+        "Document all model assumptions and parameters",
+        "Identify deviations from SOA stochastic modeling standards",
+        "Review existing validation and testing framework",
+        "Create initial assumptions document with SOA compliance notes",
+        "Map model components to IA governance requirements"
+      ],
+      "completed": [
+        "Audit current model code and architecture",
+        "Document all model assumptions and parameters"
+      ],
+      "in_progress": [
+        "Identify deviations from SOA stochastic modeling standards"
+      ],
+      "next": "Review existing validation and testing framework"
+    },
+    "Phase 2: Industry Standards Alignment": {
+      "status": "pending",
+      "description": "Align stochastic process definitions with SOA standards, implement required risk metrics, add governance framework compliance",
+      "tasks": [
+        "Implement SOA stochastic process documentation standards",
+        "Add Value at Risk (VaR) and Expected Shortfall (ES) metrics",
+        "Update parameter calibration methodology documentation",
+        "Implement governance and audit trail framework",
+        "Add scenario stress testing framework",
+        "Update model validation requirements per IA standards"
+      ],
+      "completed": [],
+      "in_progress": [],
+      "next": null
+    },
+    "Phase 3: Model Validation & Testing": {
+      "status": "pending",
+      "description": "Implement comprehensive validation suite including unit tests, integration tests, and scenario analysis",
+      "tasks": [
+        "Fix distributed executor pickling bug",
+        "Fix ALM rebalancing logic for 100%-cash initial portfolio",
+        "Create unit tests for core model components",
+        "Implement integration testing across modules",
+        "Build stress testing and scenario analysis framework",
+        "Create backtesting framework and validation reports",
+        "Document validation methodology per IA requirements",
+        "Implement automated model health checks"
+      ],
+      "completed": [],
+      "in_progress": [],
+      "next": null
+    },
+    "Phase 4: Calibration & Backtesting": {
+      "status": "pending",
+      "description": "Implement sample ESG generator, calibrate model parameters, implement TVOG computation, validate against reference data",
+      "tasks": [
+        "Implement GBM-based sample ESG generator (removes Moody's dependency for testing)",
+        "Implement TVOG computation module (PV of guarantees across stochastic scenarios)",
+        "Implement parameter calibration methodology",
+        "Create backtesting dataset and framework",
+        "Generate backtesting reports with tail loss analysis",
+        "Perform sensitivity analysis on key parameters",
+        "Document model stability and limitations"
+      ],
+      "completed": [],
+      "in_progress": [],
+      "next": null
+    },
+    "Phase 5: Documentation & Delivery": {
+      "status": "pending",
+      "description": "Final documentation, model card, risk disclosures, and deployment readiness",
+      "tasks": [
+        "Create comprehensive model documentation",
+        "Develop model risk card with limitations and known issues",
+        "Write model usage guide and assumptions document",
+        "Create deployment readiness checklist",
+        "Final validation report and sign-off",
+        "Archive model version and release notes"
+      ],
+      "completed": [],
+      "in_progress": [],
+      "next": null
+    }
+  },
+  "repository_info": {
+    "url": "https://github.com/wilson37wu/AI_Actuarial_2026_ver",
+    "branch": "main",
+    "last_commit_sha": null,
+    "last_commit_message": "[Phase 1] Document all model assumptions and parameters",
+    "commits_this_session": 2,
+    "pat_configured": true
+  },
+  "progress_metrics": {
+    "total_tasks": 31,
+    "tasks_completed": 3,
+    "phases_completed": 0,
+    "estimated_completion_pct": 10,
+    "average_cycle_duration_minutes": 43,
+    "cycles_run": 3
+  },
+  "technical_notes": {
+    "model_type": "Stochastic ALM & TVOG",
+    "language": "Python 3.10+",
+    "framework": "NumPy / Pandas / multiprocessing",
+    "key_components": [
+      "ESGAdapter (Moody's CNY format reader)",
+      "DynamicALMEngine (holdings-based portfolio + SAA rebalancing)",
+      "AssetShareEngine (70/30 profit sharing + SDA)",
+      "ParFundStochastic (bonus smoothing + surplus)",
+      "DistributedExecutor (multiprocessing batch runner)",
+      "AssumptionProvider (multi-dim table lookup)",
+      "DeterministicLiability (cashflow projection)",
+      "MonthlyProjectionEngine (PAR endowment 5/10/20Y: liability CF, asset CF by class, asset share)"
+    ],
+    "dependencies": [
+      "numpy>=1.24",
+      "pandas>=2.0",
+      "pyarrow>=12",
+      "psutil>=5.9",
+      "streamlit>=1.28"
+    ],
+    "known_quirks": [
+      "External Moody's ESG file required \u2014 not bundled; model non-runnable E2E without it",
+      "DistributedExecutor cannot pickle locally-defined functions (Python multiprocessing constraint)",
+      "ALM rebalancing does not trigger buys when starting from 100% cash position",
+      "Version inconsistency: __version__.py=0.1.0 vs __init__.py=2.0.0"
+    ],
+    "git_strategy": "commit to main after each task; push via PAT-embedded remote URL"
+  },
+  "compliance_tracking": {
+    "soa_standards_applied": [
+      "ASOP 25 gaps identified and documented"
+    ],
+    "ia_requirements_met": [
+      "Audit trail initiated (MODEL_DEV_LOG.md)"
+    ],
+    "validation_level": "Partial \u2014 59/67 tests passing (88%)",
+    "backtesting_status": "Not started",
+    "documentation_status": "Assumptions register complete"
+  },
+  "email_config": {
+    "recipient": "wilson.cuhk.ifa@gmail.com",
+    "send_on_completion": true,
+    "include_blockers": true
+  }
+}
