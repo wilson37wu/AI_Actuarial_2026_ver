@@ -324,3 +324,8 @@ For questions or collaboration inquiries, please open an issue on GitHub.
 ## 🙏 Acknowledgments
 
 This project implements actuarial modeling concepts commonly used in the insurance industry for participating product valuation and asset-liability management.
+
+## 🧾 Assumption Governance
+
+- External assumption sources and change history are tracked in `assumption.md`.
+- For the stochastic participating model, the HK mortality source reference is maintained there, while runtime still expects a user-provided CSV (`attained_age`, `male`, `female`).
